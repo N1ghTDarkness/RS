@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Zkouškový simulátor - WPAN a WLAN</title>
+    <style>
+        :root { --primary: #1a73e8; --bg: #f8f9fa; --text: #202124; --blue-square: #007bff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { width: 280px; background: #fff; border-right: 1px solid #dadce0; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+        .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
+        .nav-item { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid #dadce0; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .nav-item.flagged { background: var(--blue-square) !important; color: white; border-color: var(--blue-square); }
+        .status-green { background: #e6f4ea; color: #1e8e3e; border-color: #ceead6; }
+        .status-orange { background: #fff4e5; color: #d97706; border-color: #ffe0b2; }
+        .status-red { background: #fce8e6; color: #d93025; border-color: #fad2cf; }
+
+        #main-content { flex: 1; padding: 40px; overflow-y: auto; scroll-behavior: smooth; }
+        .header-stats { position: sticky; top: -40px; background: var(--primary); color: white; padding: 20px; border-radius: 0 0 15px 15px; margin: -40px -40px 30px -40px; display: flex; justify-content: space-between; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        .q-card { background: #fff; border-radius: 12px; padding: 30px; margin-bottom: 40px; border: 1px solid #dadce0; }
+        .q-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        .blue-sq-icon { width: 20px; height: 20px; background: var(--blue-square); display: inline-block; cursor: pointer; border-radius: 3px; opacity: 0.3; }
+        .blue-sq-icon.active { opacity: 1; }
+
+        .opt-label { display: flex; align-items: flex-start; padding: 15px; border: 2px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: 0.1s; }
+        .opt-label:hover { border-color: var(--primary); background: #f8fbff; }
+        .opt-label input { margin-right: 15px; margin-top: 5px; transform: scale(1.2); }
+        
+        .correct { background: #e6f4ea !important; border-color: #34a853 !important; }
+        .wrong { background: #fce8e6 !important; border-color: #ea4335 !important; }
+        
+        .check-btn { width: 100%; padding: 15px; background: #2c3e50; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .points-feedback { margin-top: 15px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; line-height: 1.5; }
+        .hint-box { margin-top: 10px; font-weight: normal; color: #555; font-style: italic; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 10px; }
+
+        #setup { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; color: white; }
+        .setup-card { background: #202124; padding: 40px; border-radius: 20px; max-width: 450px; width: 90%; text-align: center; border: 1px solid #3c4043; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <div class="setup-card">
+        <h2>Rádiové sítě - WPAN & WLAN</h2>
+        <p>Bluetooth, ZigBee a Wi-Fi (Okruhy 5 a 6)</p>
+        <div style="text-align:left; margin: 20px 0;">
+            <label><input type="checkbox" id="shufQ"> Náhodné pořadí úloh</label><br><br>
+            <label><input type="checkbox" id="shufA"> Náhodné pořadí odpovědí</label>
+        </div>
+        <button class="check-btn" onclick="start()">SPUSTIT TEST</button>
+    </div>
+</div>
+
+<div id="sidebar">
+    <h3>Navigace</h3>
+    <div id="navGrid" class="nav-grid"></div>
+</div>
+
+<div id="main-content">
+    <div class="header-stats">
+        <div id="prog">Zodpovězeno: 0 / 40</div>
+        <div id="score">Body: 0,00 / 0,00</div>
+    </div>
+    <div id="quiz"></div>
+</div>
+
+<script>
+const master = [
+    // OKRUH 01: ÚVOD, ZÁKLADNÍ POJMY, ROZDĚLENÍ RÁDIOVÝCH VLN
+    { id: 1, q: "Jak je v českém zákoně o elektronických komunikacích definováno rádiové spektrum?", opts: ["Vlny o kmitočtu nižším než 300 GHz", "Vlny o kmitočtu nižším než 3000 GHz šířené prostorem bez umělého vedení", "Všechno elektromagnetické záření včetně RTG", "Pouze vlny využívané pro AM a FM rádio"], ans: [1], pts: 1.0, hint: "Hledej definici ze Sbírky zákonů č. 374/2021.", rationale: "Zákon přesně specifikuje horní hranici 3000 GHz a podmínku šíření prostorem bez vedení." },
+    { id: 2, q: "Kdo v roce 1888 experimentálně dokázal existenci rádiových vln?", opts: ["Guglielmo Marconi", "James Clerk Maxwell", "Heinrich Hertz", "Albert Einstein"], ans: [2], pts: 1.0, hint: "Jeho jméno nese jednotka kmitočtu.", rationale: "Heinrich Hertz dokázal, že se tyto vlny odrážejí a lámou stejně jako světlo." },
+    { id: 3, q: "Které dvě vektorové veličiny jednoznačně popisují elektromagnetické pole?", opts: ["Rychlost a směr", "Intenzita elektrického pole (E) a magnetická indukce (B)", "Teplota a tlak", "Hmotnost a hybnost"], ans: [1], pts: 1.0, hint: "Jedna se udává ve V/m, druhá v Teslech.", rationale: "Vektory E a B jsou základními pilíři popisu elektromagnetického pole." },
+    { id: 4, q: "Jaká je přibližná rychlost šíření elektromagnetických vln ve vakuu?", opts: ["340 m/s", "300 000 km/s", "150 000 km/s", "1 000 000 m/s"], ans: [1], pts: 1.0, hint: "Odpovídá rychlosti světla.", rationale: "Konstanta c je přesně 299 792 458 m/s, což zaokrouhlujeme na 300 tisíc km/s." },
+    { id: 5, q: "Vztah pro výpočet vlnové délky (lambda) je:", opts: ["lambda = f / c", "lambda = c * f", "lambda = c / f", "lambda = 1 / f"], ans: [2], pts: 1.0, hint: "Vlnová délka je nepřímo úměrná frekvenci.", rationale: "Podílem rychlosti světla a kmitočtu získáme délku jedné vlny v metrech." },
+    { id: 6, q: "Které kmitočtové pásmo se využívá pro komunikaci s ponorkami?", opts: ["VLF (Very Low Frequency)", "VHF (Very High Frequency)", "SHF (Super High Frequency)", "EHF (Extremely High Frequency)"], ans: [0], pts: 1.0, hint: "Jde o velmi dlouhé vlny schopné pronikat hluboko do vody.", rationale: "Pásmo 3-30 kHz má schopnost částečného průniku do vodivého prostředí, jako je mořská voda." },
+    { id: 7, q: "Pásmo UHF (Ultra High Frequency) má kmitočtový rozsah:", opts: ["3-30 MHz", "30-300 MHz", "300 MHz - 3 GHz", "3-30 GHz"], ans: [2], pts: 1.0, hint: "V tomto pásmu funguje Wi-Fi (2,4 GHz) i mobilní sítě.", rationale: "Rozsah 300 MHz až 3 GHz odpovídá standardu pro UHF." },
+    { id: 8, q: "Které vlny se šíří odrazem od ionosféry, což umožňuje globální dosah?", opts: ["Krátké vlny (HF)", "Ultra krátké vlny (UHF)", "Centimetrové vlny (SHF)", "Milimetrové vlny (EHF)"], ans: [0], pts: 1.0, hint: "Pásmo 3-30 MHz, často využívané radioamatéry.", rationale: "HF vlny se odrážejí mezi zemským povrchem a ionosférou, čímž překonávají zakřivení Země." },
+    { id: 9, q: "Jaký je hlavní rozdíl mezi individuálním a všeobecným oprávněním ČTÚ?", opts: ["Individuální je zdarma, všeobecné se platí", "Všeobecné oprávnění nevyžaduje podání písemné žádosti o konkrétní kmitočet", "Individuální platí pro celou ČR, všeobecné jen pro město", "Všeobecné platí jen pro armádu"], ans: [1], pts: 1.0, hint: "Všeobecné oprávnění (VO-R) stanovuje podmínky pro všechny uživatele daného zařízení hromadně.", rationale: "U všeobecného oprávnění ČTÚ předem určí pravidla a kdokoli je splní, může kmitočet využívat bez žádosti." },
+    { id: 10, q: "Co znamená zkratka ISM v souvislosti s kmitočtovými pásmy?", opts: ["International System for Mobile", "Industrial, Scientific and Medical", "Integrated Service Module", "Internal Signal Management"], ans: [1], pts: 1.0, hint: "Využití pro jiné účely než přenos informací (např. ohřev).", rationale: "Pásma ISM jsou vyhrazena pro průmyslové, vědecké a lékařské aplikace, jako jsou mikrovlnné trouby." },
+    { id: 11, q: "Vektor intenzity elektrického pole E a magnetického pole H jsou v postupné vlně:", opts: ["Rovnoběžné", "Navzájem kolmé", "Svírají úhel 45 stupňů", "Mění se nezávisle na sobě"], ans: [1], pts: 1.0, hint: "Podívej se na blokové schéma EM pole v přednášce.", rationale: "Vektor E a H jsou na sebe vždy kolmé a oba jsou kolmé ke směru šíření." },
+    { id: 12, q: "Jak se nazývá veličina vyjadřující energii přenášenou vlnou přes jednotkovou plochu?", opts: ["Permeabilita", "Hustota zářivého toku (výkonová hustota) S", "Frekvenční zdvih", "Modulační index"], ans: [1], pts: 1.0, hint: "Jednotka je W/m^2.", rationale: "Vektor S popisuje hustotu výkonu procházejícího prostorem." },
+    { id: 13, q: "Která standardizační organizace definuje rozdělení pásem L, S, C, X, Ku, K, Ka?", opts: ["ITU-R", "IEEE", "ČTÚ", "ISO"], ans: [1], pts: 1.0, hint: "Standard IEEE 521-1984.", rationale: "IEEE zavedlo toto písmenné označení, které se běžně používá v satelitní a radarové technice." },
+    { id: 14, q: "Pro pásmo VHF (Very High Frequency) platí, že se šíří:", opts: ["Pouze v noci odrazem od ionosféry", "Přímou vlnou do vzdálenosti rádiového horizontu", "Hluboko pod zemský povrch", "Jen v metalických vodičích"], ans: [1], pts: 1.0, hint: "Typické pro FM rádio a TV vysílání.", rationale: "VHF vlny vyžadují přímou viditelnost a šíří se mírně za optický horizont díky ohybu." },
+    { id: 15, q: "Sítě 5G a satelitní internet (např. Starlink) využívají především pásmo:", opts: ["VLF", "MF", "EHF / SHF", "LF"], ans: [2], pts: 1.0, hint: "Hledej pásma s vysokým kmitočtem a velkou šířkou pásma.", rationale: "Vysoké kmitočty (GHz) umožňují přenášet extrémně velké objemy dat." },
+
+    // OKRUH 02: ZPRACOVÁNÍ RÁDIOVÝCH SIGNÁLŮ
+    { id: 16, q: "Jaké je pořadí bloků v digitálním vysílači?", opts: ["Zdroj -> Kodér kanálu -> Kodér zdroje -> Modulátor", "Zdroj -> Kodér zdroje -> Kodér kanálu -> Modulátor", "Zdroj -> Modulátor -> Kodér zdroje -> Kodér kanálu", "Zdroj -> Dekodér -> Demodulátor"], ans: [1], pts: 1.0, hint: "Nejdříve data komprimujeme, pak zabezpečujeme a nakonec posíláme na nosnou.", rationale: "Kódování zdroje (komprese) musí předcházet kódování kanálu (zabezpečení)." },
+    { id: 17, q: "Co je hlavním úkolem kodéru zdroje?", opts: ["Zvýšit výkon signálu", "Potlačit redundanci a irelevanci (komprese)", "Přidat kontrolní bity pro opravu chyb", "Změnit kmitočet nosné vlny"], ans: [1], pts: 1.0, hint: "Cílem je minimalizovat datový tok při zachování kvality.", rationale: "Kodér zdroje odstraňuje nadbytečné a pro člověka nevnímatelné složky informace." },
+    { id: 18, q: "Vztah pro kompresní poměr CR je:", opts: ["CR = Rvyst / Rvst", "CR = Rvst / Rvyst", "CR = Rvst * Rvyst", "CR = 1 / Rvst"], ans: [1], pts: 1.0, hint: "Vstupní rychlost lomeno výstupní rychlost.", rationale: "CR udává, kolikrát se zmenšil datový objem po průchodu kodérem." },
+    { id: 19, q: "Který typ hovorového kodéru má nejnižší výslednou rychlost (např. 2,4 kbit/s), ale syntetický zvuk?", opts: ["PCM kodéry", "Hybridní kodéry", "Vokodéry (parametrické kodéry)", "ADPCM"], ans: [2], pts: 1.0, hint: "Přenášejí pouze parametry modelu řeči, nikoli přesný tvar vlny.", rationale: "Vokodéry modelují lidský hlasový trakt a dosahují extrémní komprese za cenu nižší přirozenosti." },
+    { id: 20, q: "Metoda CELP (Code-Excited Linear Prediction) patří mezi:", opts: ["Kodéry tvarového průběhu", "Čisté vokodéry", "Hybridní kodéry", "Analogové modulace"], ans: [2], pts: 1.0, hint: "Kombinuje analýzu-syntézu s kódovou knihou excitací.", rationale: "CELP je dnes nejrozšířenější hybridní metoda (G.729, AMR, Opus)." },
+    { id: 21, q: "Systém hodnocení kvality řeči MOS (Mean Opinion Score) má maximum:", opts: ["10 bodů", "100 procent", "5 bodů", "1 bod"], ans: [2], pts: 1.0, hint: "5 bodů znamená vynikající kvalitu bez úsilí při poslechu.", rationale: "MOS je subjektivní stupnice od 1 (špatná) do 5 (vynikající)." },
+    { id: 22, q: "Co je hlavním cílem kanálového kódování?", opts: ["Komprese dat", "Zabezpečení proti chybám úmyslným zvýšením redundance", "Zvýšení vysílacího výkonu", "Šifrování obsahu zprávy"], ans: [1], pts: 1.0, hint: "Přidáváme bity navíc, abychom mohli chyby detekovat a opravit.", rationale: "Kanálové kódování chrání zprávu před šumem a rušením v přenosovém kanálu." },
+    { id: 23, q: "Kódový zisk (Coding Gain) udává:", opts: ["Kolikrát se zvýší rychlost přenosu", "O kolik dB lze snížit poměr S/N při zachování stejného BER", "Zisk antény v dB", "Počet opravených bitů v jednom rámci"], ans: [1], pts: 1.0, hint: "Je to výhoda, kterou získáme díky kvalitnímu kódování.", rationale: "Díky kódovému zisku můžeme vysílat s nižším výkonem a přesto mít kvalitní příjem." },
+    { id: 24, q: "Který z uvedených kódů patří mezi korekční (opravné) kódy?", opts: ["Pouze jednoduchá parita", "Reed-Solomonův kód", "ASCII kód", "Morseova abeceda"], ans: [1], pts: 1.0, hint: "Využívají se v CD, DVD nebo satelitním vysílání.", rationale: "Reed-Solomon a konvoluční kódy jsou schopny chyby nejen najít, ale i opravit." },
+    { id: 25, q: "Interleaving (prokládání) slouží jako ochrana proti:", opts: ["Ojedinělým chybám", "Skupinovým (shlukovým) chybám", "Ztrátě napájení", "Nízkému kmitočtu nosné"], ans: [1], pts: 1.0, hint: "Rozprostírá chyby v čase, aby je korekční kód mohl zvládnout.", rationale: "Prokládání zajistí, že dlouhý výpadek signálu nepoškodí bity za sebou, ale 'rozhází' je do různých bloků." },
+    { id: 26, q: "Systém FEC (Forward Error Correction) se vyznačuje tím, že:", opts: ["Vyžaduje zpětný kanál pro žádost o opakování", "Opravuje chyby přímo v přijímači bez zpětného dotazu", "Nefunguje u rádiových spojů", "Vždy zdvojnásobuje šířku pásma"], ans: [1], pts: 1.0, hint: "Zkratka znamená 'dopředná korekce'.", rationale: "U FEC přijímač opravuje chyby sám pomocí redundantních bitů, což je klíčové pro jednosměrné spoje." },
+    { id: 27, q: "ARQ (Automatic Request Repetition) systémy opravují chyby:", opts: ["Pomocí složitých algoritmů v dekodéru", "Opakovaným vysíláním poškozeného bloku", "Zvýšením kmitočtu vysílače", "Nefungují v digitálních sítích"], ans: [1], pts: 1.0, hint: "Vyžadují potvrzení o přijetí (ACK/NACK).", rationale: "ARQ je založen na detekci chyby a následném vyžádání nové kopie dat přes zpětný kanál." },
+    { id: 28, q: "Modulace je proces, při kterém se:", opts: ["Mění parametry zprávy podle nosné vlny", "Mění některý parametr nosné vlny v rytmu modulačního signálu", "Zvyšuje amplituda hovoru", "Odstraňuje šum ze signálu"], ans: [1], pts: 1.0, hint: "Měníme amplitudu, kmitočet nebo fázi nosné vlny.", rationale: "Modulace transformuje signál ze základního pásma do vysokofrekvenčního pro efektivní šíření." },
+    { id: 29, q: "V konstelačním diagramu (rovina IQ) představuje osa Q složku:", opts: ["Synfázní (reálnou)", "Kvadraturní (imaginární, posunutou o 90 stupňů)", "Kvalitativní", "Frekvenční"], ans: [1], pts: 1.0, hint: "Zkratka z anglického 'Quadrature'.", rationale: "I (In-phase) a Q (Quadrature) jsou dvě ortogonální složky modulačního symbolu." },
+    { id: 30, q: "U vícestavové modulace M-PSK platí pro počet přenášených bitů na symbol (n) vztah:", opts: ["n = M / 2", "n = log2(M)", "n = M^2", "n = 2 * M"], ans: [1], pts: 1.0, hint: "Pokud má modulace 16 stavů, kolik je to bitů?", rationale: "Např. 16-QAM přenáší 4 bity na symbol (log2 z 16)." },
+    { id: 31, q: "Která modulace kombinuje klíčování amplitudy i fáze zároveň?", opts: ["ASK", "PSK", "QAM (Kvadraturní amplitudová modulace)", "FSK"], ans: [2], pts: 1.0, hint: "Používá se v moderních systémech jako Wi-Fi nebo LTE.", rationale: "QAM mění polohu symbolu v ploše diagramu, nikoli jen po kružnici (fáze) nebo po ose (amplituda)." },
+    { id: 32, q: "Modulace 256-QAM přenáší v jednom symbolu:", opts: ["4 bity", "8 bitů", "16 bitů", "256 bitů"], ans: [1], pts: 1.0, hint: "Hledej mocninu dvou: 2 na kolikátou je 256?", rationale: "2^8 = 256, tedy jeden symbol reprezentuje 8-bitovou kombinaci." },
+    { id: 33, q: "Co je to 'dibit'?", opts: ["Bit s poloviční energií", "Bitová dvojice přenášená jedním modulačním symbolem", "Speciální bit pro synchronizaci", "Způsob kódování nuly"], ans: [1], pts: 1.0, hint: "Předpona di- značí dva.", rationale: "U 4-stavových modulací (např. QPSK) každý stav nese 2 bity (dibit)." },
+    { id: 34, q: "Hlavní výhodou vícestavových modulací (vyšší M) je:", opts: ["Větší odolnost proti šumu", "Úspora šířky pásma při stejné přenosové rychlosti", "Jednodušší konstrukce přijímače", "Nižší cena vysílače"], ans: [1], pts: 1.0, hint: "Přenášíme více bitů za stejný čas v užším kanálu.", rationale: "Vícestavové modulace zvyšují spektrální účinnost přenosu." },
+    { id: 35, q: "Nevýhodou modulací s vysokým počtem stavů (např. 1024-QAM) je:", opts: ["Velká vlnová délka", "Nízká přenosová rychlost", "Vysoká citlivost na šum a rušení", "Nemožnost šíření v atmosféře"], ans: [2], pts: 1.0, hint: "Body v konstelačním diagramu jsou příliš blízko u sebe.", rationale: "Čím více je stavů, tím menší rozdíl v amplitudě/fázi stačí k chybnému rozhodnutí o bitu." },
+    { id: 36, q: "V mobilních sítích GSM se používá modulační schéma:", opts: ["Pouze analogová FM", "RPE-LTP s modulací GMSK", "1024-QAM", "Morseova abeceda"], ans: [1], pts: 1.0, hint: "GMSK je varianta FSK s vyhlazenými přechody.", rationale: "GSM kombinuje RPE-LTP kódování hlasu s GMSK modulací." },
+    { id: 37, q: "Jaký parametr nosné se mění u modulace FSK?", opts: ["Amplituda", "Kmitočet", "Fáze", "Barva"], ans: [1], pts: 1.0, hint: "Zkratka z anglického 'Frequency'.", rationale: "Frequency Shift Keying přiřazuje bitům 0 a 1 různé frekvence nosné vlny." },
+    { id: 38, q: "Pojem 'signálový prostor' se nejčastěji spojuje s:", opts: ["Měřením výkonu antény", "Zobrazením stavů modulace v konstelačním diagramu", "Šířením vln ve vesmíru", "Stíněním budov"], ans: [1], pts: 1.0, hint: "IQ rovina je signálový prostor.", rationale: "V signálovém prostoru definujeme vzdálenost mezi modulačními symboly." },
+    { id: 39, q: "Kodéry tvarového průběhu (např. PCM) mají výhodu v tom, že jsou:", opts: ["Extrémně složité", "Relativně jednoduché, levné a odolné vůči rušení", "Přenášejí jen parametry řeči", "Mají nejvyšší kompresní poměr"], ans: [1], pts: 1.0, hint: "Snaží se o co nejdokonalejší shodu průběhu signálu.", rationale: "PCM je základní metoda (G.711) používaná v pevné telefonii pro svou jednoduchost a kvalitu." },
+    { id: 40, q: "V moderních sítích 5G a Wi-Fi 6 se setkáváme s modulacemi až:", opts: ["4-PSK", "16-QAM", "1024-QAM až 4096-QAM", "Pouze AM"], ans: [2], pts: 1.0, hint: "Hledej nejvyšší čísla v tabulce QAM.", rationale: "Vysoký počet stavů umožňuje dosahovat gigabitových rychlostí v omezeném pásmu." }
+];
+let data = [], curScore = 0, maxPosScore = 0, solved = 0;
+
+function start() {
+    const qS = document.getElementById('shufQ').checked, aS = document.getElementById('shufA').checked;
+    data = JSON.parse(JSON.stringify(master));
+    if(qS) data.sort(() => Math.random() - 0.5);
+    if(aS) data.forEach(d => {
+        let os = d.opts.map((o,i) => ({t:o, c:d.ans.includes(i)}));
+        os.sort(() => Math.random() - 0.5);
+        d.opts = os.map(o => o.t); d.ans = os.reduce((a,o,i) => {if(o.c) a.push(i); return a;}, []);
+    });
+    document.getElementById('setup').style.display = 'none';
+    renderNav(); renderQuiz();
+}
+
+function renderNav() {
+    const g = document.getElementById('navGrid');
+    data.forEach((_, i) => {
+        let d = document.createElement('div');
+        d.className = 'nav-item'; d.id = `nav-${i}`;
+        d.innerText = i + 1;
+        d.onclick = () => document.getElementById(`qcard-${i}`).scrollIntoView({behavior:'smooth'});
+        g.appendChild(d);
+    });
+}
+
+function renderQuiz() {
+    const c = document.getElementById('quiz');
+    data.forEach((d, i) => {
+        let isM = d.ans.length > 1;
+        let card = document.createElement('div');
+        card.className = 'q-card'; card.id = `qcard-${i}`;
+        card.innerHTML = `
+            <div class="q-header">
+                <div class="q-id-box">
+                    <span class="blue-sq-icon" id="sq-${i}" onclick="toggleSquare(${i})"></span>
+                    <span id="num-display-${i}" style="font-weight:bold">${i+1}</span>
+                    <span style="color:#666; margin-left:10px">ID ${d.id}</span>
+                </div>
+                <div style="color:var(--primary); font-weight:bold">${d.pts} b</div>
+            </div>
+            <div style="margin-bottom:25px; line-height:1.4">${d.q}</div>
+            <div id="opts-${i}">
+                ${d.opts.map((o,oi) => `<label class="opt-label"><input type="${isM?'checkbox':'radio'}" name="q${i}" value="${oi}"><span>${o}</span></label>`).join('')}
+            </div>
+            <button class="check-btn" id="btn-${i}" onclick="check(${i})">ODEVZDAT ÚLOHU</button>
+            <div id="feedback-${i}" class="points-feedback"></div>
+        `;
+        c.appendChild(card);
+    });
+}
+
+function toggleSquare(i) {
+    const icon = document.getElementById(`sq-${i}`);
+    const navItem = document.getElementById(`nav-${i}`);
+    const numDisplay = document.getElementById(`num-display-${i}`);
+    icon.classList.toggle('active');
+    navItem.classList.toggle('flagged');
+    const isAct = icon.classList.contains('active');
+    navItem.innerText = isAct ? '?' : i + 1;
+    numDisplay.innerText = isAct ? '?' : i + 1;
+}
+
+function check(i) {
+    const d = data[i], block = document.getElementById(`opts-${i}`);
+    const sel = Array.from(block.querySelectorAll('input:checked')).map(n => parseInt(n.value));
+    if(!sel.length) return alert("Musíte vybrat odpověď!");
+
+    document.getElementById(`btn-${i}`).disabled = true;
+    block.querySelectorAll('input').forEach(inp => inp.disabled = true);
+
+    let correctCount = 0, wrongCount = 0;
+    d.ans.forEach(a => { if(sel.includes(a)) correctCount++; });
+    sel.forEach(s => { if(!d.ans.includes(s)) wrongCount++; });
+
+    let gain = (correctCount - wrongCount) * (d.pts / d.ans.length);
+    if(gain < 0) gain = 0;
+    
+    curScore += gain; maxPosScore += d.pts; solved++;
+
+    const feed = document.getElementById(`feedback-${i}`);
+    feed.style.display = 'block';
+    feed.innerHTML = `Získáno ${gain.toFixed(2)} z ${d.pts} b. <div class="hint-box"><strong>Odůvodnění:</strong> ${d.hint}</div>`;
+    feed.style.background = (gain >= d.pts * 0.99) ? '#e6f4ea' : gain > 0 ? '#fff4e5' : '#fce8e6';
+
+    let nav = document.getElementById(`nav-${i}`);
+    if(gain >= d.pts * 0.99) nav.classList.add('status-green');
+    else if(gain > 0) nav.classList.add('status-orange');
+    else nav.classList.add('status-red');
+
+    block.querySelectorAll('.opt-label').forEach((l, oi) => {
+        if(d.ans.includes(oi)) l.classList.add('correct');
+        else if(sel.includes(oi)) l.classList.add('wrong');
+    });
+
+    document.getElementById('prog').innerText = `Zodpovězeno: ${solved} / ${data.length}`;
+    document.getElementById('score').innerText = `Body: ${curScore.toFixed(2)} / ${maxPosScore.toFixed(2)}`;
+}
+</script>
+</body>
+</html>

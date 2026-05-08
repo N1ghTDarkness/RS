@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Zkouškový simulátor - WPAN a WLAN</title>
+    <style>
+        :root { --primary: #1a73e8; --bg: #f8f9fa; --text: #202124; --blue-square: #007bff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { width: 280px; background: #fff; border-right: 1px solid #dadce0; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+        .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
+        .nav-item { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid #dadce0; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .nav-item.flagged { background: var(--blue-square) !important; color: white; border-color: var(--blue-square); }
+        .status-green { background: #e6f4ea; color: #1e8e3e; border-color: #ceead6; }
+        .status-orange { background: #fff4e5; color: #d97706; border-color: #ffe0b2; }
+        .status-red { background: #fce8e6; color: #d93025; border-color: #fad2cf; }
+
+        #main-content { flex: 1; padding: 40px; overflow-y: auto; scroll-behavior: smooth; }
+        .header-stats { position: sticky; top: -40px; background: var(--primary); color: white; padding: 20px; border-radius: 0 0 15px 15px; margin: -40px -40px 30px -40px; display: flex; justify-content: space-between; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        .q-card { background: #fff; border-radius: 12px; padding: 30px; margin-bottom: 40px; border: 1px solid #dadce0; }
+        .q-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        .blue-sq-icon { width: 20px; height: 20px; background: var(--blue-square); display: inline-block; cursor: pointer; border-radius: 3px; opacity: 0.3; }
+        .blue-sq-icon.active { opacity: 1; }
+
+        .opt-label { display: flex; align-items: flex-start; padding: 15px; border: 2px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: 0.1s; }
+        .opt-label:hover { border-color: var(--primary); background: #f8fbff; }
+        .opt-label input { margin-right: 15px; margin-top: 5px; transform: scale(1.2); }
+        
+        .correct { background: #e6f4ea !important; border-color: #34a853 !important; }
+        .wrong { background: #fce8e6 !important; border-color: #ea4335 !important; }
+        
+        .check-btn { width: 100%; padding: 15px; background: #2c3e50; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .points-feedback { margin-top: 15px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; line-height: 1.5; }
+        .hint-box { margin-top: 10px; font-weight: normal; color: #555; font-style: italic; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 10px; }
+
+        #setup { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; color: white; }
+        .setup-card { background: #202124; padding: 40px; border-radius: 20px; max-width: 450px; width: 90%; text-align: center; border: 1px solid #3c4043; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <div class="setup-card">
+        <h2>Rádiové sítě - WPAN & WLAN</h2>
+        <p>Bluetooth, ZigBee a Wi-Fi (Okruhy 5 a 6)</p>
+        <div style="text-align:left; margin: 20px 0;">
+            <label><input type="checkbox" id="shufQ"> Náhodné pořadí úloh</label><br><br>
+            <label><input type="checkbox" id="shufA"> Náhodné pořadí odpovědí</label>
+        </div>
+        <button class="check-btn" onclick="start()">SPUSTIT TEST</button>
+    </div>
+</div>
+
+<div id="sidebar">
+    <h3>Navigace</h3>
+    <div id="navGrid" class="nav-grid"></div>
+</div>
+
+<div id="main-content">
+    <div class="header-stats">
+        <div id="prog">Zodpovězeno: 0 / 40</div>
+        <div id="score">Body: 0,00 / 0,00</div>
+    </div>
+    <div id="quiz"></div>
+</div>
+
+<script>
+const master = [
+    // WPAN (Bluetooth, ZigBee)
+    { id: 1, q: "Co znamená zkratka POS v kontextu WPAN?", opts: ["Personal Operating Space", "Personal Optical System", "Positioning Online Service"], ans: [0], pts: 1, hint: "POS definuje prostor s malým dosahem (cca 10 m) kolem uživatele. [cite: 3141, 3142]" },
+    { id: 2, q: "Která standardizační skupina IEEE odpovídá za sítě WPAN?", opts: ["IEEE 802.11", "IEEE 802.15", "IEEE 802.16"], ans: [1], pts: 1, hint: "802.11 je WLAN, 802.15 je WPAN a 802.16 je WMAN (WiMAX). [cite: 3099, 3100, 3104]" },
+    { id: 3, q: "Kolik aktivních slave stanic může být v jedné Bluetooth pikosíti (verze do 3.0)?", opts: ["Neomezeně", "Až 7", "Až 10", "Až 255"], ans: [1], pts: 1, hint: "Pro označení slave stanic jsou ve specifikaci vyhrazeny 3 bity, což umožňuje 7 aktivních zařízení + 1 master. [cite: 3193, 3197]" },
+    { id: 4, q: "Bluetooth využívá techniku rozprostřeného spektra:", opts: ["DSSS", "FHSS", "OFDM"], ans: [1], pts: 1, hint: "FHSS (Frequency Hopping) znamená pseudonáhodné přeskakování mezi 79 kmitočty rychlostí 1600 skoků/s. [cite: 3260, 3263, 3264]" },
+    { id: 5, q: "Která vrstva Bluetooth modelu odpovídá za vytváření spojení a autentizaci?", opts: ["Radio", "Baseband", "LMP (Link Manager)", "L2CAP"], ans: [2], pts: 1, hint: "LMP (Link Manager Protocol) domlouvá pravidla komunikace, šifrování a řízení spojení. [cite: 3343, 3353, 3354]" },
+    { id: 6, q: "Vrstva L2CAP v Bluetooth modelu zajišťuje:", opts: ["Modulaci GFSK", "Segmentaci a sestavení dlouhých paketů", "Frekvenční skoky", "Konverzi pro audio kodek LC3"], ans: [1], pts: 1, hint: "L2CAP (Logical Link Control and Adaptation) rozděluje data z aplikační vrstvy do formátu Bluetooth. [cite: 3405, 3422]" },
+    { id: 7, q: "Jaký je maximální vysílací výkon zařízení Bluetooth třídy I?", opts: ["1 mW", "2,5 mW", "100 mW"], ans: [2], pts: 1, hint: "Třída I má dosah cca 100 m při 100 mW. Třída III má pouze 1 mW pro krátký dosah. [cite: 3286, 3287]" },
+    { id: 8, q: "Protokol RFCOMM v rámci Bluetooth architektury slouží k:", opts: ["Hledání služeb", "Emulaci sériového portu RS232", "Řízení frekvenčních skoků"], ans: [1], pts: 1, hint: "RFCOMM se často nazývá 'virtuální kabel' a umožňuje nahradit fyzické sériové linky. [cite: 3574, 3576, 3579]" },
+    { id: 9, q: "Která verze Bluetooth zavedla technologii BLE (Low Energy)?", opts: ["2.0+EDR", "3.0", "4.0"], ans: [2], pts: 1, hint: "Verze 4.0 z roku 2010 se zaměřila na extrémně nízkou spotřebu pro senzory. [cite: 3689, 3692]" },
+    { id: 10, q: "Funkce AoA a AoD zavedené ve verzi BT 5.1 slouží k:", opts: ["Zvýšení rychlosti na 24 Mbit/s", "Zpřesnění navigace (úhly signálu)", "Připojení k Wi-Fi"], ans: [1], pts: 1, hint: "Angle of Arrival a Angle of Departure umožňují určovat pozici s přesností na centimetry. [cite: 3717, 3718]" },
+    { id: 11, q: "ZigBee pracuje primárně v celosvětovém pásmu:", opts: ["868 MHz", "915 MHz", "2,4 GHz"], ans: [2], pts: 1, hint: "V pásmu 2,4 GHz nabízí ZigBee 16 kanálů a rychlost 250 kbit/s. [cite: 3894]" },
+    { id: 12, q: "V topologii ZigBee se zařízení RFD může stát koordinátorem:", opts: ["Ano", "Ne"], ans: [1], pts: 1, hint: "RFD (Reduced Functionality Device) může komunikovat pouze s koordinátorem, nemůže jím být. To může jen FFD. [cite: 3813, 3814]" },
+    { id: 13, q: "Přístup na kanál u ZigBee (802.15.4) je založen na:", opts: ["TDMA", "CSMA/CA", "FDDI"], ans: [1], pts: 1, hint: "Využívá se mechanismus Carrier Sense Multiple Access s předcházením kolizím. [cite: 3898]" },
+    { id: 14, q: "Jaký šifrovací algoritmus je standardem pro ZigBee?", opts: ["DES", "AES (128 bitů)", "RSA"], ans: [1], pts: 1, hint: "ZigBee využívá AES pro autentizaci i šifrování na linkové a síťové vrstvě. [cite: 3971, 3972]" },
+    { id: 15, q: "Standard Matter (vytvořený CSA) má za cíl:", opts: ["Nahradit Bluetooth verze 6", "Sjednotit ZigBee, Wi-Fi, Thread a BT pro IoT", "Zvýšit rychlost ZigBee na 54 Mbit/s"], ans: [1], pts: 1, hint: "Matter je nový standard pro chytrou domácnost zajišťující interoperabilitu různých výrobců. [cite: 4048, 4049]" },
+
+    // WLAN (Wi-Fi)
+    { id: 16, q: "Původní aliance pro kompatibilitu bezdrátového ethernetu se jmenovala:", opts: ["Wi-Fi Alliance", "WECA", "IEEE Group"], ans: [1], pts: 1, hint: "WECA byla založena v roce 1999, na Wi-Fi Alliance se přejmenovala v roce 2003. [cite: 4122, 4123]" },
+    { id: 17, q: "Která Wi-Fi komponenta tvoří přemostění mezi kabelovým Ethernetem a rádiem?", opts: ["Distribuční systém", "Access Point (AP)", "BSS"], ans: [1], pts: 1, hint: "AP funguje jako most (bridge) poskytující bezdrátový přístup k distribučnímu systému. [cite: 4140]" },
+    { id: 18, q: "V topologii ad-hoc stanice komunikují:", opts: ["Přes centrální Access Point", "Přímo mezi sebou", "Přes externí server"], ans: [1], pts: 1, hint: "Ad-hoc síť nevyžaduje žádnou infrastrukturu (AP). [cite: 4159, 4171]" },
+    { id: 19, q: "Podvrstva PLCP v rámci fyzické vrstvy Wi-Fi zajišťuje:", opts: ["Modulaci a kódování", "Detekci nosné a rozhraní k PMD", "Šifrování AES"], ans: [1], pts: 1, hint: "PLCP zajišťuje konvergenci k médiu (informace o rychlosti, kanálu atd.). [cite: 4210]" },
+    { id: 20, q: "Která Wi-Fi technika rozprostření spektra využívá 22 MHz široké kanály?", opts: ["FHSS", "DSSS", "OFDM"], ans: [1], pts: 1, hint: "DSSS je typické pro standard 802.11b, kde se signál rozprostře do 22 MHz pásma. [cite: 4226]" },
+    { id: 21, q: "OFDM multiplex ve standardech 802.11a/g/n převádí:", opts: ["Sériový tok na paralelní subnosné", "Analogový signál na digitální", "Frekvenci 2,4 GHz na 5 GHz"], ans: [0], pts: 1, hint: "OFDM rozděluje rychlý tok na mnoho pomalých paralelních kanálů, což je odolnější proti rušení. [cite: 4227]" },
+    { id: 22, q: "Kolik vzájemně se nekryjících kanálů existuje v pásmu 2,4 GHz (pro 20 MHz šířku)?", opts: ["1", "3", "11", "13"], ans: [1], pts: 1, hint: "V Evropě se typicky používají kanály 1, 6 a 11, aby se nerušily. [cite: 4253]" },
+    { id: 23, q: "Maximální povolený výkon EIRP v ČR pro pásmo 2,4 GHz je:", opts: ["10 mW", "100 mW", "1 W", "200 mW"], ans: [1], pts: 1, hint: "100 mW (20 dBm) platí pro všechny standardy v tomto pásmu. [cite: 4256]" },
+    { id: 24, q: "V pásmu 5 GHz je v ČR prvních 8 kanálů vyhrazeno pro:", opts: ["Venkovní spoje (1 W)", "Pouze pro vnitřní využití (200 mW)", "Radarové systémy"], ans: [1], pts: 1, hint: "Nižší kanály mají omezení výkonu a jsou určeny pouze dovnitř budov. [cite: 4271]" },
+    { id: 25, q: "Které frekvence Wi-Fi musí být v ČR blokovány kvůli meteoradarům?", opts: ["2,412 GHz", "5620 MHz a 5640 MHz", "6 GHz"], ans: [1], pts: 1, hint: "Tyto kanály používá ČHMÚ a Wi-Fi zařízení je musí automaticky vynechat. [cite: 4427]" },
+    { id: 26, q: "Mechanismus CSMA/CA v rámci DCF funkce slouží k:", opts: ["Zvýšení rychlosti na 54 Mbit/s", "Řízení přístupu na sdílené médium", "Šifrování paketů"], ans: [1], pts: 1, hint: "Stanice naslouchá médiu a vysílá jen když je volno (plus náhodné čekání). [cite: 4318]" },
+    { id: 27, q: "Co řeší mechanismus RTS/CTS ve Wi-Fi sítích?", opts: ["Rychlejší stahování dat", "Problém 'skryté stanice' (virtuální naslouchání)", "Automatické párování"], ans: [1], pts: 1, hint: "Pomocí paketů RTS/CTS si stanice rezervuje médium na určitý čas. [cite: 4319]" },
+    { id: 28, q: "Které adresní pole v MAC rámci Wi-Fi neexistuje?", opts: ["ADD1", "ADD4", "ADD5"], ans: [2], pts: 1, hint: "Wi-Fi rámec má až 4 adresní pole (zdroj, cíl, AP, atd.). [cite: 4342, 4349]" },
+    { id: 29, q: "Zabezpečení WEP (Wired Equivalent Privacy) je dnes považováno za:", opts: ["Vysoce bezpečné", "Zastaralé a prolomené", "Povinné pro Wi-Fi 6"], ans: [1], pts: 1, hint: "WEP byl první mechanismus, dnes je nahrazen WPA2/WPA3. [cite: 4404]" },
+    { id: 30, q: "WPA3 zabezpečení (z roku 2018) přináší šifrovací algoritmus:", opts: ["TKIP", "CNSA (192 bitů)", "MD5"], ans: [1], pts: 1, hint: "Commercial National Security Algorithm je součástí standardu WPA3. [cite: 4412]" },
+    { id: 31, q: "Fenomén 'delay spread' u Wi-Fi je způsoben:", opts: ["Nízkým výkonem baterie", "Vícecestným šířením (odrazy)", "Pomalým procesorem v AP"], ans: [1], pts: 1, hint: "Je to časový rozdíl mezi přijetím přímého signálu a posledního odraženého. [cite: 4444]" },
+    { id: 32, q: "Standard 802.11b (Wi-Fi 1) dosahuje maximální rychlosti:", opts: ["2 Mbit/s", "11 Mbit/s", "54 Mbit/s"], ans: [1], pts: 1, hint: "Pracuje v pásmu 2,4 GHz a využívá DSSS. [cite: 4471, 4473]" },
+    { id: 33, q: "Který Wi-Fi standard jako první zavedl technologii MIMO?", opts: ["802.11g", "802.11n (Wi-Fi 4)", "802.11ac"], ans: [1], pts: 1, hint: "802.11n využívá více antén k dosažení rychlosti až 600 Mbit/s. [cite: 4493, 4496]" },
+    { id: 34, q: "Wi-Fi 5 (802.11ac) pracuje výhradně v pásmu:", opts: ["2,4 GHz", "5 GHz", "60 GHz"], ans: [1], pts: 1, hint: "Tento standard je optimalizován pro 5 GHz pásmo s modulací 256-QAM. [cite: 4497, 4498]" },
+    { id: 35, q: "Která technologie je klíčová pro Wi-Fi 6 (802.11ax)?", opts: ["FHSS", "OFDMA a 1024-QAM", "Pouze DSSS"], ans: [1], pts: 1, hint: "OFDMA umožňuje efektivnější dělení kanálu mezi více uživatelů současně. [cite: 4516, 4519]" },
+    { id: 36, q: "Wi-Fi 6E rozšiřuje standard 802.11ax o pásmo:", opts: ["900 MHz", "6 GHz", "Sub-GHz"], ans: [1], pts: 1, hint: "6E (Extended) přidává nové volné pásmo 6 GHz pro méně rušenou komunikaci. [cite: 4531, 4532]" },
+    { id: 37, q: "Standard 802.11ay využívá pásmo 60 GHz. Jeho nevýhodou je:", opts: ["Malá rychlost", "Krátký dosah a nutnost přímé viditelnosti", "Vysoké rušení mikrovlnkami"], ans: [1], pts: 1, hint: "Vlny v pásmu 60 GHz (mmWave) neprocházejí zdmi. [cite: 4535, 4537]" },
+    { id: 38, q: "Wi-Fi 7 (802.11be) bude mít šířku kanálu až:", opts: ["40 MHz", "160 MHz", "320 MHz"], ans: [2], pts: 1, hint: "Dvojnásobek oproti Wi-Fi 6, což umožní extrémní rychlosti. [cite: 4543]" },
+    { id: 39, q: "Funkce TWT (Target Wake Time) u Wi-Fi 6 slouží k:", opts: ["Měření vzdálenosti", "Plánování uspávání zařízení (úspora energie)", "Změně kanálu"], ans: [1], pts: 1, hint: "Ideální pro IoT, zařízení se probudí jen v přesně dohodnutý čas. [cite: 4520]" },
+    { id: 40, q: "Pohlcování rádiových vln vodou (např. déšť) způsobuje:", opts: ["Zlepšení dosahu", "Útlum signálu (ohřev vody)", "Zvýšení frekvence"], ans: [1], pts: 1, hint: "Voda vlny nepohlcuje ale spíše absorbuje jejich energii. [cite: 4434]" }
+];
+
+let data = [], curScore = 0, maxPosScore = 0, solved = 0;
+
+function start() {
+    const qS = document.getElementById('shufQ').checked, aS = document.getElementById('shufA').checked;
+    data = JSON.parse(JSON.stringify(master));
+    if(qS) data.sort(() => Math.random() - 0.5);
+    if(aS) data.forEach(d => {
+        let os = d.opts.map((o,i) => ({t:o, c:d.ans.includes(i)}));
+        os.sort(() => Math.random() - 0.5);
+        d.opts = os.map(o => o.t); d.ans = os.reduce((a,o,i) => {if(o.c) a.push(i); return a;}, []);
+    });
+    document.getElementById('setup').style.display = 'none';
+    renderNav(); renderQuiz();
+}
+
+function renderNav() {
+    const g = document.getElementById('navGrid');
+    data.forEach((_, i) => {
+        let d = document.createElement('div');
+        d.className = 'nav-item'; d.id = `nav-${i}`;
+        d.innerText = i + 1;
+        d.onclick = () => document.getElementById(`qcard-${i}`).scrollIntoView({behavior:'smooth'});
+        g.appendChild(d);
+    });
+}
+
+function renderQuiz() {
+    const c = document.getElementById('quiz');
+    data.forEach((d, i) => {
+        let isM = d.ans.length > 1;
+        let card = document.createElement('div');
+        card.className = 'q-card'; card.id = `qcard-${i}`;
+        card.innerHTML = `
+            <div class="q-header">
+                <div class="q-id-box">
+                    <span class="blue-sq-icon" id="sq-${i}" onclick="toggleSquare(${i})"></span>
+                    <span id="num-display-${i}" style="font-weight:bold">${i+1}</span>
+                    <span style="color:#666; margin-left:10px">ID ${d.id}</span>
+                </div>
+                <div style="color:var(--primary); font-weight:bold">${d.pts} b</div>
+            </div>
+            <div style="margin-bottom:25px; line-height:1.4">${d.q}</div>
+            <div id="opts-${i}">
+                ${d.opts.map((o,oi) => `<label class="opt-label"><input type="${isM?'checkbox':'radio'}" name="q${i}" value="${oi}"><span>${o}</span></label>`).join('')}
+            </div>
+            <button class="check-btn" id="btn-${i}" onclick="check(${i})">ODEVZDAT ÚLOHU</button>
+            <div id="feedback-${i}" class="points-feedback"></div>
+        `;
+        c.appendChild(card);
+    });
+}
+
+function toggleSquare(i) {
+    const icon = document.getElementById(`sq-${i}`);
+    const navItem = document.getElementById(`nav-${i}`);
+    const numDisplay = document.getElementById(`num-display-${i}`);
+    icon.classList.toggle('active');
+    navItem.classList.toggle('flagged');
+    const isAct = icon.classList.contains('active');
+    navItem.innerText = isAct ? '?' : i + 1;
+    numDisplay.innerText = isAct ? '?' : i + 1;
+}
+
+function check(i) {
+    const d = data[i], block = document.getElementById(`opts-${i}`);
+    const sel = Array.from(block.querySelectorAll('input:checked')).map(n => parseInt(n.value));
+    if(!sel.length) return alert("Musíte vybrat odpověď!");
+
+    document.getElementById(`btn-${i}`).disabled = true;
+    block.querySelectorAll('input').forEach(inp => inp.disabled = true);
+
+    let correctCount = 0, wrongCount = 0;
+    d.ans.forEach(a => { if(sel.includes(a)) correctCount++; });
+    sel.forEach(s => { if(!d.ans.includes(s)) wrongCount++; });
+
+    let gain = (correctCount - wrongCount) * (d.pts / d.ans.length);
+    if(gain < 0) gain = 0;
+    
+    curScore += gain; maxPosScore += d.pts; solved++;
+
+    const feed = document.getElementById(`feedback-${i}`);
+    feed.style.display = 'block';
+    feed.innerHTML = `Získáno ${gain.toFixed(2)} z ${d.pts} b. <div class="hint-box"><strong>Odůvodnění:</strong> ${d.hint}</div>`;
+    feed.style.background = (gain >= d.pts * 0.99) ? '#e6f4ea' : gain > 0 ? '#fff4e5' : '#fce8e6';
+
+    let nav = document.getElementById(`nav-${i}`);
+    if(gain >= d.pts * 0.99) nav.classList.add('status-green');
+    else if(gain > 0) nav.classList.add('status-orange');
+    else nav.classList.add('status-red');
+
+    block.querySelectorAll('.opt-label').forEach((l, oi) => {
+        if(d.ans.includes(oi)) l.classList.add('correct');
+        else if(sel.includes(oi)) l.classList.add('wrong');
+    });
+
+    document.getElementById('prog').innerText = `Zodpovězeno: ${solved} / ${data.length}`;
+    document.getElementById('score').innerText = `Body: ${curScore.toFixed(2)} / ${maxPosScore.toFixed(2)}`;
+}
+</script>
+</body>
+</html>

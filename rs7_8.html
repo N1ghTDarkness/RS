@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Zkouškový simulátor - WPAN a WLAN</title>
+    <style>
+        :root { --primary: #1a73e8; --bg: #f8f9fa; --text: #202124; --blue-square: #007bff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { width: 280px; background: #fff; border-right: 1px solid #dadce0; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+        .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
+        .nav-item { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid #dadce0; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .nav-item.flagged { background: var(--blue-square) !important; color: white; border-color: var(--blue-square); }
+        .status-green { background: #e6f4ea; color: #1e8e3e; border-color: #ceead6; }
+        .status-orange { background: #fff4e5; color: #d97706; border-color: #ffe0b2; }
+        .status-red { background: #fce8e6; color: #d93025; border-color: #fad2cf; }
+
+        #main-content { flex: 1; padding: 40px; overflow-y: auto; scroll-behavior: smooth; }
+        .header-stats { position: sticky; top: -40px; background: var(--primary); color: white; padding: 20px; border-radius: 0 0 15px 15px; margin: -40px -40px 30px -40px; display: flex; justify-content: space-between; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        .q-card { background: #fff; border-radius: 12px; padding: 30px; margin-bottom: 40px; border: 1px solid #dadce0; }
+        .q-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        .blue-sq-icon { width: 20px; height: 20px; background: var(--blue-square); display: inline-block; cursor: pointer; border-radius: 3px; opacity: 0.3; }
+        .blue-sq-icon.active { opacity: 1; }
+
+        .opt-label { display: flex; align-items: flex-start; padding: 15px; border: 2px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: 0.1s; }
+        .opt-label:hover { border-color: var(--primary); background: #f8fbff; }
+        .opt-label input { margin-right: 15px; margin-top: 5px; transform: scale(1.2); }
+        
+        .correct { background: #e6f4ea !important; border-color: #34a853 !important; }
+        .wrong { background: #fce8e6 !important; border-color: #ea4335 !important; }
+        
+        .check-btn { width: 100%; padding: 15px; background: #2c3e50; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .points-feedback { margin-top: 15px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; line-height: 1.5; }
+        .hint-box { margin-top: 10px; font-weight: normal; color: #555; font-style: italic; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 10px; }
+
+        #setup { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; color: white; }
+        .setup-card { background: #202124; padding: 40px; border-radius: 20px; max-width: 450px; width: 90%; text-align: center; border: 1px solid #3c4043; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <div class="setup-card">
+        <h2>Rádiové sítě - WPAN & WLAN</h2>
+        <p>Bluetooth, ZigBee a Wi-Fi (Okruhy 5 a 6)</p>
+        <div style="text-align:left; margin: 20px 0;">
+            <label><input type="checkbox" id="shufQ"> Náhodné pořadí úloh</label><br><br>
+            <label><input type="checkbox" id="shufA"> Náhodné pořadí odpovědí</label>
+        </div>
+        <button class="check-btn" onclick="start()">SPUSTIT TEST</button>
+    </div>
+</div>
+
+<div id="sidebar">
+    <h3>Navigace</h3>
+    <div id="navGrid" class="nav-grid"></div>
+</div>
+
+<div id="main-content">
+    <div class="header-stats">
+        <div id="prog">Zodpovězeno: 0 / 40</div>
+        <div id="score">Body: 0,00 / 0,00</div>
+    </div>
+    <div id="quiz"></div>
+</div>
+
+<script>
+const master = [
+    // OKRUH 07: MOBILNÍ SYSTÉMY 0G, 1G a 2G (GSM)
+    { id: 1, q: "Který systém patří do tzv. 0. generace mobilních sítí?", opts: ["GSM", "NMT", "Autorádiotelefon ARP (Finsko)", "LTE"], ans: [2], pts: 1.0, hint: "Jde o analogovou nezabezpečenou síť spuštěnou v roce 1971.", rationale: "ARP byl finský systém 0. generace; NMT patří do 1G a GSM do 2G. [cite: 11047, 11048]" },
+    { id: 2, q: "Jaká byla hlavní nevýhoda systému ARP?", opts: ["Pomalý internet", "Nemožnost handoveru", "Malé pokrytí Finska", "Pouze digitální přenos"], ans: [1], pts: 1.0, hint: "Hledej omezení při pohybu mezi buňkami.", rationale: "V systému ARP nebylo možné automatické přepojení hovoru mezi základnovými stanicemi. [cite: 11052]" },
+    { id: 3, q: "Který z uvedených systémů 1. generace byl provozován v ČSFR od roku 1991?", opts: ["AMPS", "TACS", "NMT 450", "C 450"], ans: [2], pts: 1.0, hint: "Nordic Mobile Telephony pracující v pásmu 450 MHz.", rationale: "NMT 450 byl první široce dostupný mobilní systém v bývalém Československu. [cite: 11114]" },
+    { id: 4, q: "Základní rozdíl mezi NMT 450 a NMT 900 je:", opts: ["NMT 900 je plně digitální", "NMT 900 má vyšší počet kanálů a menší buňky", "NMT 450 má vyšší přenosovou rychlost dat", "NMT 900 neumožňuje handover"], ans: [1], pts: 1.0, hint: "Vyšší frekvence znamená více kanálů, ale horší šíření signálu.", rationale: "NMT 900 navýšilo počet kanálů o 1000 a zmenšilo typickou velikost buňky na 2–20 km. [cite: 11145, 11147]" },
+    { id: 5, q: "Které tři hlavní subsystémy tvoří architekturu sítě GSM?", opts: ["BSS, NSS, OSS", "BTS, BSC, MSC", "HLR, VLR, EIR", "GSM, GPRS, UMTS"], ans: [0], pts: 1.0, hint: "Hledej zkratky pro základnové stanice, síťové přepojování a provozní podporu.", rationale: "GSM architektura se dělí na BSS (Base Station), NSS (Network and Switching) a OSS (Operation Support). [cite: 11240, 11241]" },
+    { id: 6, q: "K čemu slouží v síti GSM jednotka TRAU (Transcoder and Rate Adaptor Unit)?", opts: ["K šifrování hovorů", "K přizpůsobení bitových rychlostí mezi BSC a MSC", "K lokalizaci mobilní stanice", "K ukládání SMS zpráv"], ans: [1], pts: 1.0, hint: "Nachází se mezi BSC a MSC.", rationale: "TRAU provádí transkódování řeči (např. z 13 kbit/s na 64 kbit/s pro PCM). [cite: 11388]" },
+    { id: 7, q: "Jakou informaci v GSM síti obsahuje databáze HLR?", opts: ["Dočasné údaje o návštěvnících v lokační oblasti", "Trvalé informace o všech 'domovských' účastnících ústředny", "Identifikaci zcizených mobilních telefonů", "Záznam o každém jednotlivém hovoru"], ans: [1], pts: 1.0, hint: "Home Location Register.", rationale: "HLR uchovává identitu uživatele (IMSI) a informace o předplacených službách. [cite: 11451, 11452]" },
+    { id: 8, q: "Co je to IMSI v systému GSM?", opts: ["Mezinárodní volací číslo telefonu", "Jednoznačná identifikace uživatele (účastníka)", "Identifikační číslo hardwaru telefonu", "Kód pro odblokování SIM karty"], ans: [1], pts: 1.0, hint: "Skládá se z MCC, MNC a MSIN.", rationale: "IMSI je unikátní číslo přiřazené účastníkovi (uloženo na SIM), nikoliv přístroji. [cite: 11465]" },
+    { id: 9, q: "Registr EIR v síti GSM slouží k:", opts: ["Ověřování autentičnosti účastníka", "Identifikaci zcizených nebo neoprávněně užívaných mobilních stanic", "Ukládání volacích čísel MSISDN", "Řízení handoveru"], ans: [1], pts: 1.0, hint: "Equipment Identity Register.", rationale: "EIR sleduje IMEI přístrojů a může zablokovat kradené telefony. [cite: 11553, 11554]" },
+    { id: 10, q: "Pásmo PGSM (Primary GSM) používá kmitočtový odstup duplexu (FDD):", opts: ["10 MHz", "45 MHz", "95 MHz", "200 kHz"], ans: [1], pts: 1.0, hint: "Rozdíl mezi downlinkem a uplinkem.", rationale: "U PGSM je odstup mezi vysíláním a příjmem stanoven na 45 MHz. [cite: 11587, 11680]" },
+    { id: 11, q: "Jaký typ mnohonásobného přístupu využívá standard GSM?", opts: ["Pouze FDMA", "FDMA/TDMA", "Pouze CDMA", "SDMA"], ans: [1], pts: 1.0, hint: "Dělení podle kmitočtu i času.", rationale: "GSM dělí pásmo na rádiové kanály (FDMA) a každý kanál na 8 časových slotů (TDMA). [cite: 11207, 11598]" },
+    { id: 12, q: "Kolik časových úseků (TS) tvoří jeden TDMA rámec v GSM?", opts: ["1", "4", "8", "16"], ans: [2], pts: 1.0, hint: "Podívej se na nákres rozdělení kmitočtového pásma.", rationale: "Jeden TDMA rámec o délce 4,615 ms obsahuje 8 časových slotů (TS 0 až TS 7). [cite: 11659, 11660]" },
+    { id: 13, q: "Telematické služby GSM (např. přenos hlasu nebo SMS) zahrnují které vrstvy RM-OSI?", opts: ["Pouze 1. vrstvu", "Vrstvy 1 až 3", "Vrstvy 1 až 7", "Pouze 7. vrstvu"], ans: [2], pts: 1.0, hint: "Hledej rozdíl oproti přenosovým (transportním) službám.", rationale: "Telematické služby definují komunikaci mezi koncovými zařízeními a zahrnují všech 7 vrstev OSI. [cite: 11718]" },
+    { id: 14, q: "Do které fáze GSM služeb patří zavedení technologií GPRS a EDGE?", opts: ["Fáze 1", "Fáze 2", "Fáze 2+", "Fáze 3"], ans: [2], pts: 1.0, hint: "Jde o rozvojovou fázi zahrnující nové datové přenosy.", rationale: "Fáze 2+ přinesla vysokorychlostní datové přenosy a nové hlasové kodeky. [cite: 11736]" },
+    { id: 15, q: "Doba trvání jednoho časového slotu v TDMA rámci GSM je:", opts: ["1 ms", "4,615 ms", "577 μs", "57,7 μs"], ans: [2], pts: 1.0, hint: "Je to jedna osmina TDMA rámce.", rationale: "Jeden časový slot (Time Slot) trvá přesně 577 mikrosekund. [cite: 11602]" },
+
+    // OKRUH 08: MOBILNÍ DATOVÉ SYSTÉMY (CSD, GPRS, EDGE, UMTS, LTE, 5G)
+    { id: 16, q: "Služba CSD (Circuit Switched Data) v GSM funguje na principu:", opts: ["Paketového přenosu", "Přepojování okruhů s garantovanou kapacitou", "Sdílení šířky pásma mezi všemi uživateli", "Pouze pro příjem SMS"], ans: [1], pts: 1.0, hint: "Circuit Switched.", rationale: "CSD vyhradí souvislou přenosovou cestu s pevnou rychlostí (typicky 9,6 kbit/s). [cite: 11831, 11832]" },
+    { id: 17, q: "Hlavní nevýhodou CSD přenosu dat je:", opts: ["Nemožnost šifrování", "Tarifikace podle doby spojení (času)", "Využití milimetrových vln", "Vysoká latence jednotek sekund"], ans: [1], pts: 1.0, hint: "Platíte, i když zrovna žádná data neproudí.", rationale: "Jelikož jde o vyhrazený okruh, operátoři účtují čas spojení bez ohledu na objem dat. [cite: 11882]" },
+    { id: 18, q: "Technologie HSCSD dosahuje vyšší rychlosti oproti CSD díky:", opts: ["Nové modulaci 1024-QAM", "Sdružování více časových slotů (timeslotů) pro jedno spojení", "Přechodu na pásmo 5 GHz", "Změně z analogového na digitální přenos"], ans: [1], pts: 1.0, hint: "High Speed Circuit Switched Data.", rationale: "HSCSD umožňuje sdružit např. 4 sloty a dosáhnout tak rychlosti až 57,6 kbit/s. [cite: 11892, 11902]" },
+    { id: 19, q: "Služba GPRS (General Packet Radio Service) je označována jako generace:", opts: ["2G", "2,5G", "3G", "4G"], ans: [1], pts: 1.0, hint: "Mezistupeň mezi GSM a UMTS.", rationale: "GPRS zavedlo paketový přenos do GSM sítí a je považováno za 2,5. generaci. [cite: 11807]" },
+    { id: 20, q: "Jaké dva nové uzly přidává architektura GPRS do sítě GSM?", opts: ["BTS a BSC", "SGSN a GGSN", "HLR a VLR", "NodeB a RNC"], ans: [1], pts: 1.0, hint: "GPRS Support Nodes.", rationale: "Pro řízení paketů jsou nutné uzly SGSN (obsluha) a GGSN (brána k internetu). [cite: 11978, 11979, 11980]" },
+    { id: 21, q: "Tarifikace u GPRS probíhá typicky na základě:", opts: ["Doby trvání spojení", "Objemu přenesených dat", "Počtu uskutečněných handoverů", "Síly signálu"], ans: [1], pts: 1.0, hint: "Díky paketovému přenosu můžete být 'vždy připojeni'.", rationale: "U GPRS platíte za skutečně přenesené bajty, nikoliv za čas připojení k síti. [cite: 12045, 12145]" },
+    { id: 22, q: "GPRS zařízení třídy 'A' se vyznačují tím, že:", opts: ["Umožňují pouze datové přenosy", "Umožňují současně telefonovat i přenášet paketová data", "Musí být manuálně přepnuta mezi hlasem a daty", "Fungují pouze v blízkosti BTS"], ans: [1], pts: 1.0, hint: "Nejvyšší třída schopností terminálu.", rationale: "Třída A zvládá oba režimy (okruhový i paketový) paralelně. [cite: 12130]" },
+    { id: 23, q: "Technologie EDGE (Enhanced Data Rates for GSM Evolution) využívá modulaci:", opts: ["GMSK", "8-PSK", "QPSK", "16-QAM"], ans: [1], pts: 1.0, hint: "Modulace umožňující přenést 3 bity na jeden stav (symbol).", rationale: "EDGE využívá 8-PSK (kromě základní GMSK) k navýšení rychlosti až na 384 kbit/s. [cite: 12161, 12170]" },
+    { id: 24, q: "Systém UMTS (3G) v Evropě využívá pro rádioý přístup technologii:", opts: ["TDMA", "W-CDMA", "OFDMA", "FDMA"], ans: [1], pts: 1.0, hint: "Wideband Code Division Multiple Access.", rationale: "UMTS přešlo z časového dělení na kódové dělení kanálů (CDMA). [cite: 12224, 12370]" },
+    { id: 25, q: "Jaká je maximální teoretická rychlost UMTS v pikobuňce (vnitřní prostředí)?", opts: ["144 kbit/s", "384 kbit/s", "2 Mbit/s", "100 Mbit/s"], ans: [2], pts: 1.0, hint: "Při rychlosti pohybu uživatele do 3 km/hod.", rationale: "Původní UMTS specifikovalo až 2 Mbit/s pro stacionární uživatele nebo v budovách. [cite: 12395, 12396]" },
+    { id: 26, q: "Nadstavba HSPA (3,5G) se dělí na dva směry:", opts: ["Uplink a Downlink", "HSDPA (Downlink) a HSUPA (Uplink)", "GSM a UMTS", "FDD a TDD"], ans: [1], pts: 1.0, hint: "Hledej zkratky pro vysokorychlostní paketový přístup nahoru a dolů.", rationale: "HSDPA zrychluje stahování (Downlink), HSUPA zrychluje odesílání (Uplink). [cite: 12408, 12410, 12411]" },
+    { id: 27, q: "Technologie MIMO (Multiple-Input Multiple-Output) znamená:", opts: ["Použití více frekvencí současně", "Použití více antén na straně vysílače i přijímače", "Možnost připojení více uživatelů k jedné BTS", "Změnu modulace za běhu"], ans: [1], pts: 1.0, hint: "Více vstupů, více výstupů.", rationale: "MIMO využívá více antén ke zvýšení kapacity a spolehlivosti přenosu. [cite: 12424]" },
+    { id: 28, q: "Co tvoří systém EPS (Evolved Packet System) u technologie LTE?", opts: ["BTS a mobilní telefon", "LTE (rádiová část) a SAE (jádro sítě)", "Pouze IP protokol", "SIM karta a anténa"], ans: [1], pts: 1.0, hint: "Spojení přístupové sítě a evoluce architektury systému.", rationale: "EPS je tvořen rádioou částí (LTE) a jádrem sítě (SAE). [cite: 12447]" },
+    { id: 29, q: "Jediným uzlem přístupové sítě E-UTRAN v technologii LTE je:", opts: ["BSC", "RNC", "eNode B", "SGSN"], ans: [2], pts: 1.0, hint: "Evolved Node B.", rationale: "LTE zjednodušilo architekturu tím, že eNode B vykonává funkce, které dříve dělily NodeB a RNC. [cite: 12467]" },
+    { id: 30, q: "Jaká je maximální teoretická rychlost downlinku u základního standardu LTE?", opts: ["2 Mbit/s", "10,8 Mbit/s", "326,4 Mbit/s", "1 Gbit/s"], ans: [2], pts: 1.0, hint: "Release 8.", rationale: "Základní LTE definuje maximální rychlost stahování 326,4 Mbit/s. [cite: 12472]" },
+    { id: 31, q: "Která technologie umožňuje v LTE-A (4G) sdružování nosných frekvencí?", opts: ["MIMO", "Carrier Aggregation (CA)", "Beamforming", "Handover"], ans: [1], pts: 1.0, hint: "Sčítání kanálů pro dosažení šířky až 100 MHz.", rationale: "Carrier Aggregation spojuje více frekvenčních pásem pro navýšení rychlosti až k 1 Gbit/s. [cite: 12499]" },
+    { id: 32, q: "Jaké jsou tři základní typy služeb definované pro sítě 5G?", opts: ["Hlas, SMS, Internet", "eMBB, uRLLC, mMTC", "GSM, UMTS, LTE", "WiFi, Bluetooth, ZigBee"], ans: [1], pts: 1.0, hint: "Širokopásmová data, nízké zpoždění a komunikace strojů.", rationale: "5G definuje eMBB (rychlost), uRLLC (spolehlivost/latence) a mMTC (Internet věcí). [cite: 12551, 12552]" },
+    { id: 33, q: "V sítích 5G technologie Beamforming slouží k:", opts: ["Měření rychlosti uživatele", "Tvarování a směrování rádioých paprsků přímo k uživateli", "Změně barvy LED na telefonu", "Šifrování datových paketů"], ans: [1], pts: 1.0, hint: "Elektrické nasměrování svazku.", rationale: "Beamforming soustředí signál do úzkého paprsku směrem k zařízení, čímž snižuje rušení a spotřebu. [cite: 12570, 12571]" },
+    { id: 34, q: "Architektura sítě 5G se nazývá SBA, což znamená:", opts: ["Simple Based Architecture", "Service-Based Architecture", "Signal Base Access", "Station Binary Area"], ans: [1], pts: 1.0, hint: "Architektura založená na službách.", rationale: "5G jádro je postaveno na SBA, kde prvky sítě nabízejí své funkce jako služby přes API. [cite: 12601]" },
+    { id: 35, q: "Která funkce v jádru 5G sítě (SBA) přiděluje IP adresy (služba DHCP)?", opts: ["AMF", "UPF", "SMF", "AUSF"], ans: [2], pts: 1.0, hint: "Session Management Function.", rationale: "SMF má na starosti správu relací, včetně přidělování IP adres. [cite: 12653]" },
+    { id: 36, q: "Technologie 'Massive MIMO' u 5G využívá výhodu:", opts: ["Dlouhých vln (VLF)", "Krátkých vlnových délek milimetrových vln pro umístění mnoha antén", "Nízkého výkonu vysílačů", "Použití pouze jedné antény"], ans: [1], pts: 1.0, hint: "Více antén na malém prostoru.", rationale: "Díky mm vlnám (vysoký kmitočet) jsou antény malé, což umožňuje jejich zmnohonásobení na BTS. [cite: 12569]" },
+    { id: 37, q: "V 5G architektuře prvek UPF (User Plane Function) zajišťuje:", opts: ["Autentizaci uživatele", "Směrování paketů a přístup k vnější síti (Internetu)", "Výběr typu síťového řezu (slice)", "Ukládání profilů v databázi UDM"], ans: [1], pts: 1.0, hint: "Uživatelská rovina.", rationale: "UPF je zodpovědný za samotný přenos uživatelských dat mezi rádioou sítí a internetem. [cite: 12650]" },
+    { id: 38, q: "Jaké frekvenční pásmo (označované jako mmWave) je nově využíváno pro 5G?", opts: ["Pod 1 GHz", "1 - 6 GHz", "30 - 300 GHz", "Pouze 2,4 GHz"], ans: [2], pts: 1.0, hint: "Milimetrové vlny.", rationale: "5G využívá mmWave pásma (např. 26 GHz a vyšší) pro dosažení extrémních rychlostí. [cite: 12568, 12586]" },
+    { id: 39, q: "Přenosová rychlost 5G má dosahovat v ideálních podmínkách až:", opts: ["100 Mbit/s", "1 Gbit/s", "Desítky Gbit/s", "1 Tbit/s"], ans: [2], pts: 1.0, hint: "Využití velmi širokých kanálů.", rationale: "Díky širokým kanálům ve vysokých pásmech umožňuje 5G rychlosti v řádech desítek gigabitů za sekundu. [cite: 12538]" },
+    { id: 40, q: "Služba uRLLC v sítích 5G je určena pro:", opts: ["Masivní připojení milionů senzorů", "Extrémně rychlé stahování 4K filmů", "Služby vyžadující velmi nízké zpoždění a vysokou spolehlivost", "Pouze hlasové hovory v HD kvalitě"], ans: [2], pts: 1.0, hint: "Ultra-Reliable Low-Latency Communications.", rationale: "uRLLC je klíčové pro aplikace jako autonomní řízení vozidel nebo robotiku v průmyslu. [cite: 12552, 12556]" }
+];
+
+let data = [], curScore = 0, maxPosScore = 0, solved = 0;
+
+function start() {
+    const qS = document.getElementById('shufQ').checked, aS = document.getElementById('shufA').checked;
+    data = JSON.parse(JSON.stringify(master));
+    if(qS) data.sort(() => Math.random() - 0.5);
+    if(aS) data.forEach(d => {
+        let os = d.opts.map((o,i) => ({t:o, c:d.ans.includes(i)}));
+        os.sort(() => Math.random() - 0.5);
+        d.opts = os.map(o => o.t); d.ans = os.reduce((a,o,i) => {if(o.c) a.push(i); return a;}, []);
+    });
+    document.getElementById('setup').style.display = 'none';
+    renderNav(); renderQuiz();
+}
+
+function renderNav() {
+    const g = document.getElementById('navGrid');
+    data.forEach((_, i) => {
+        let d = document.createElement('div');
+        d.className = 'nav-item'; d.id = `nav-${i}`;
+        d.innerText = i + 1;
+        d.onclick = () => document.getElementById(`qcard-${i}`).scrollIntoView({behavior:'smooth'});
+        g.appendChild(d);
+    });
+}
+
+function renderQuiz() {
+    const c = document.getElementById('quiz');
+    data.forEach((d, i) => {
+        let isM = d.ans.length > 1;
+        let card = document.createElement('div');
+        card.className = 'q-card'; card.id = `qcard-${i}`;
+        card.innerHTML = `
+            <div class="q-header">
+                <div class="q-id-box">
+                    <span class="blue-sq-icon" id="sq-${i}" onclick="toggleSquare(${i})"></span>
+                    <span id="num-display-${i}" style="font-weight:bold">${i+1}</span>
+                    <span style="color:#666; margin-left:10px">ID ${d.id}</span>
+                </div>
+                <div style="color:var(--primary); font-weight:bold">${d.pts} b</div>
+            </div>
+            <div style="margin-bottom:25px; line-height:1.4">${d.q}</div>
+            <div id="opts-${i}">
+                ${d.opts.map((o,oi) => `<label class="opt-label"><input type="${isM?'checkbox':'radio'}" name="q${i}" value="${oi}"><span>${o}</span></label>`).join('')}
+            </div>
+            <button class="check-btn" id="btn-${i}" onclick="check(${i})">ODEVZDAT ÚLOHU</button>
+            <div id="feedback-${i}" class="points-feedback"></div>
+        `;
+        c.appendChild(card);
+    });
+}
+
+function toggleSquare(i) {
+    const icon = document.getElementById(`sq-${i}`);
+    const navItem = document.getElementById(`nav-${i}`);
+    const numDisplay = document.getElementById(`num-display-${i}`);
+    icon.classList.toggle('active');
+    navItem.classList.toggle('flagged');
+    const isAct = icon.classList.contains('active');
+    navItem.innerText = isAct ? '?' : i + 1;
+    numDisplay.innerText = isAct ? '?' : i + 1;
+}
+
+function check(i) {
+    const d = data[i], block = document.getElementById(`opts-${i}`);
+    const sel = Array.from(block.querySelectorAll('input:checked')).map(n => parseInt(n.value));
+    if(!sel.length) return alert("Musíte vybrat odpověď!");
+
+    document.getElementById(`btn-${i}`).disabled = true;
+    block.querySelectorAll('input').forEach(inp => inp.disabled = true);
+
+    let correctCount = 0, wrongCount = 0;
+    d.ans.forEach(a => { if(sel.includes(a)) correctCount++; });
+    sel.forEach(s => { if(!d.ans.includes(s)) wrongCount++; });
+
+    let gain = (correctCount - wrongCount) * (d.pts / d.ans.length);
+    if(gain < 0) gain = 0;
+    
+    curScore += gain; maxPosScore += d.pts; solved++;
+
+    const feed = document.getElementById(`feedback-${i}`);
+    feed.style.display = 'block';
+    feed.innerHTML = `Získáno ${gain.toFixed(2)} z ${d.pts} b. <div class="hint-box"><strong>Odůvodnění:</strong> ${d.hint}</div>`;
+    feed.style.background = (gain >= d.pts * 0.99) ? '#e6f4ea' : gain > 0 ? '#fff4e5' : '#fce8e6';
+
+    let nav = document.getElementById(`nav-${i}`);
+    if(gain >= d.pts * 0.99) nav.classList.add('status-green');
+    else if(gain > 0) nav.classList.add('status-orange');
+    else nav.classList.add('status-red');
+
+    block.querySelectorAll('.opt-label').forEach((l, oi) => {
+        if(d.ans.includes(oi)) l.classList.add('correct');
+        else if(sel.includes(oi)) l.classList.add('wrong');
+    });
+
+    document.getElementById('prog').innerText = `Zodpovězeno: ${solved} / ${data.length}`;
+    document.getElementById('score').innerText = `Body: ${curScore.toFixed(2)} / ${maxPosScore.toFixed(2)}`;
+}
+</script>
+</body>
+</html>

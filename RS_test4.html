@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Zkouškový simulátor - Radiokomunikační systémy (Sada 4)</title>
+    <style>
+        :root { --primary: #1a73e8; --bg: #f8f9fa; --text: #202124; --blue-square: #007bff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { width: 260px; background: #fff; border-right: 1px solid #dadce0; display: flex; flex-direction: column; padding: 15px; overflow-y: auto; }
+        h3 { margin-top: 0; margin-bottom: 10px; font-size: 1.1em; }
+
+        .nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 15px; }
+        .nav-item { width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s; }
+        .nav-item.flagged { background: var(--blue-square) !important; color: white; border-color: var(--blue-square); }
+        .status-green { background: #e6f4ea; color: #1e8e3e; border-color: #ceead6; }
+        .status-orange { background: #fff4e5; color: #d97706; border-color: #ffe0b2; }
+        .status-red { background: #fce8e6; color: #d93025; border-color: #fad2cf; }
+
+        .external-links { border-top: 1px solid #eee; padding-top: 10px; margin-top: 5px; }
+        .side-link { display: block; text-decoration: none; color: #5f6368; padding: 6px 10px; margin-bottom: 3px; border-radius: 6px; font-size: 0.8em; transition: 0.1s; border: 1px solid transparent; line-height: 1.2; }
+        .side-link:hover { background: #f1f3f4; border-color: #dadce0; color: var(--primary); }
+        .side-link strong { display: block; color: var(--text); font-size: 0.95em; }
+
+        #main-content { flex: 1; padding: 40px; overflow-y: auto; scroll-behavior: smooth; }
+        .header-stats { position: sticky; top: -40px; background: var(--primary); color: white; padding: 20px; border-radius: 0 0 15px 15px; margin: -40px -40px 30px -40px; display: flex; justify-content: space-between; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        .q-card { background: #fff; border-radius: 12px; padding: 30px; margin-bottom: 40px; border: 1px solid #dadce0; }
+        .q-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        .blue-sq-icon { width: 20px; height: 20px; background: var(--blue-square); display: inline-block; cursor: pointer; border-radius: 3px; opacity: 0.3; }
+        .blue-sq-icon.active { opacity: 1; }
+
+        .opt-label { display: flex; align-items: flex-start; padding: 12px; border: 2px solid #eee; border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: 0.1s; font-size: 0.95em; }
+        .opt-label:hover { border-color: var(--primary); background: #f8fbff; }
+        .opt-label input { margin-right: 12px; margin-top: 4px; transform: scale(1.1); }
+        
+        .correct { background: #e6f4ea !important; border-color: #34a853 !important; }
+        .wrong { background: #fce8e6 !important; border-color: #ea4335 !important; }
+        
+        .check-btn { width: 100%; padding: 15px; background: #2c3e50; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .submit-all-btn { background: #1a73e8; font-size: 1.1em; margin-top: 20px; margin-bottom: 80px; padding: 18px; }
+        
+        .points-feedback { margin-top: 15px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; line-height: 1.5; font-size: 0.95em; }
+        .hint-box { margin-top: 10px; font-weight: normal; color: #555; font-style: italic; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 10px; }
+
+        #setup { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; color: white; }
+        .setup-card { background: #202124; padding: 40px; border-radius: 20px; max-width: 450px; width: 90%; text-align: center; border: 1px solid #3c4043; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <div class="setup-card">
+        <h2>RADIOKOMUNIKAČNÍ SYSTÉMY - SADA 4</h2>
+        <p>Otázky ze souboru Untitled-4.html (Architektura GSM, GPRS třídy, parametry sítě).</p>
+        <div style="text-align:left; margin: 20px 0;">
+            <label><input type="checkbox" id="shufQ"> Náhodné pořadí úloh</label><br><br>
+            <label><input type="checkbox" id="shufA"> Náhodné pořadí odpovědí</label>
+        </div>
+        <button class="check-btn" onclick="start()">SPUSTIT TEST</button>
+    </div>
+</div>
+
+<div id="sidebar">
+    <h3>Navigace</h3>
+    <div id="navGrid" class="nav-grid"></div>
+
+    <div class="external-links">
+        <a href="#" class="side-link"><strong>🏠 Domů</strong>Všechny materiály</a>
+        <a href="#" class="side-link"><strong>📶 Radiové sítě</strong>Sada 4</a>
+    </div>
+</div>
+
+<div id="main-content">
+    <div class="header-stats">
+        <div id="prog">Zodpovězeno: 0 / 14</div>
+        <div id="score">Body: 0,00 / 0,00</div>
+    </div>
+    <div id="quiz"></div>
+    <div id="final-anchor">
+        <button class="check-btn submit-all-btn" onclick="finishAll()">ODEVZDAT VŠE A UKONČIT TEST</button>
+    </div>
+</div>
+
+<script>
+const master = [
+    { id: 1, q: "Který z uvedených prvků sítě GSM nepatří do subsystému OSS?", opts: ["ADC", "NMC", "AuC", "jiná odpověď", "OMC"], ans: [2], pts: 1.0, rationale: "AuC (Authentication Centre) patří do síťového subsystému NSS, nikoliv do subsystému provozu a údržby OSS." },
+    { id: 2, q: "Rozhraní v síti GSM označované jako Abis se nachází mezi:", opts: ["MS a BSC", "MS a BTS", "BTS a BSC", "BTS a MSC", "BSC a MSC", "BTS a BSS", "MS a BSS"], ans: [2], pts: 1.0, rationale: "Rozhraní Abis definuje propojení mezi základnovou stanicí (BTS) a jejím řadičem (BSC)." },
+    { id: 3, q: "Počet rádiových kanálů u systému PGSM je:", opts: ["124", "900", "74", "250", "45", "8", "200", "125"], ans: [0], pts: 1.0, rationale: "Standardní (Primary) GSM 900 využívá kmitočtový rozsah rozdělený na 124 rádiových kanálů." },
+    { id: 4, q: "Odstup rádiových kanálů u systému GSM 1800 je:", opts: ["25 kHz", "250 kHz", "50 kHz", "200 kHz", "45 kHz", "20 kHz", "100 kHz"], ans: [3], pts: 1.0, rationale: "Stejně jako u GSM 900, i u varianty 1800 MHz je odstup sousedních nosných 200 kHz." },
+    { id: 5, q: "TMSI znamená:", opts: ["číslo účastníka", "kód mobilní stanice", "účastnické číslo", "identifikační číslo mobilní stanice", "kód aktuální lokalizační oblasti", "volací číslo", "dočasná identifikace uživatele", "sériové číslo mobilní stanice"], ans: [6], pts: 1.0, rationale: "TMSI (Temporary Mobile Subscriber Identity) je dočasný identifikátor používaný pro zvýšení bezpečnosti a anonymity uživatele." },
+    { id: 6, q: "Mobilní sítě 3. generace UMTS mohou využívat:", opts: ["pouze TDD.", "pouze FDD.", "FDD i TDD."], ans: [2], pts: 1.0, rationale: "UMTS je navrženo pro práci v obou duplexních režimech (kmitočtovém i časovém)." },
+    { id: 7, q: "Střední hodnota vysílacího výkonu mobilních stanic u systému DECT je:", opts: ["10 mW", "10 W", "100 mW", "1 W", "1 mW"], ans: [0], pts: 1.0, rationale: "DECT pracuje s pulzním špičkovým výkonem 250 mW, což při střídě 1/24 odpovídá střední hodnotě cca 10 mW." },
+    { id: 8, q: "Kmitočtový rozsah u systému GSM 1800 činí:", opts: ["170 MHz", "174 MHz", "160 MHz", "124 MHz", "75 MHz", "90 MHz", "374 MHz"], ans: [0], pts: 1.0, rationale: "Podle zdrojového souboru je správná odpověď 170 MHz (pravděpodobně myšleno celkové obsazené spektrum)." },
+    { id: 9, q: "Navýšení přenosové rychlosti HSCSD bylo dosaženo:", opts: ["použitím nového typu zdrojového kódování.", "použitím nového typu modulace.", "použitím nového typu kanálového kódování.", "začleněním účinnějších síťových prvků...", "použitím účinnějšího komprimačního algoritmu..."], ans: [2], pts: 1.0, rationale: "HSCSD využívá nové kódovací schémata kanálového kódování pro zvýšení propustnosti jednoho slotu na 14,4 kbit/s." },
+    { id: 10, q: "Jaký typ prokládání se používá při zpracování signálu v systému GSM?", opts: ["konvoluční", "blokové", "jiný typ", "interblokové", "diagonální"], ans: [4], pts: 1.0, rationale: "GSM využívá diagonální prokládání (interleaving) pro ochranu proti shlukovým chybám v rádiovém kanálu." },
+    { id: 11, q: "Systém RDS pracuje v pásmu:", opts: ["UHF", "VHF", "HF", "SHF", "MF"], ans: [1], pts: 1.0, rationale: "RDS (Radio Data System) je doplňková služba FM vysílání v pásmu VHF (87,5–108 MHz)." },
+    { id: 12, q: "Základní jednotka přenosu v systému GSM se jmenuje:", opts: ["interval", "burst", "bit", "timeslot", "rámec"], ans: [1], pts: 1.0, rationale: "Burst je časově omezený balík dat vysílaný v jednom časovém slotu (timeslotu)." },
+    { id: 13, q: "Digitální radiokomunikační systém GSM využívá metodu:", opts: ["FDMA/CDMA", "FDMA", "TDMA", "CDMA", "TDMA/CDMA", "FDMA/TDMA"], ans: [5], pts: 1.0, rationale: "GSM kombinuje kmitočtové (FDMA - různé nosné) a časové (TDMA - různé sloty) dělení." },
+    { id: 14, q: "V GPRS zařízení třídy B:", opts: ["jsou terminály umožňující v jeden okamžik jen jednu službu (hovor nebo data) bez možnosti přecházet mezi těmito dvěma režimy.", "jsou terminály umožňující v jeden okamžik jen jednu službu (hovor nebo data) s možností přecházet mezi těmito dvěma režimy.", "jsou terminály umožňující ovládat pouze služby na základě přepojování paketů.", "jsou terminály umožňující současně ovládat služby...", "jsou terminály umožňující ovládat pouze služby na základě přepojování okruhů.."], ans: [1], pts: 1.0, rationale: "Třída B umožňuje obojí, ale ne současně. Telefon automaticky přepne na hovor, když přijde, a pozastaví data." }
+];
+
+let data = [], curScore = 0, maxPosScore = 0, solved = 0;
+
+function start() {
+    const qS = document.getElementById('shufQ').checked, aS = document.getElementById('shufA').checked;
+    data = JSON.parse(JSON.stringify(master));
+    if(qS) data.sort(() => Math.random() - 0.5);
+    if(aS) data.forEach(d => {
+        let os = d.opts.map((o,i) => ({t:o, c:d.ans.includes(i)}));
+        os.sort(() => Math.random() - 0.5);
+        d.opts = os.map(o => o.t); d.ans = os.reduce((a,o,i) => {if(o.c) a.push(i); return a;}, []);
+    });
+    document.getElementById('setup').style.display = 'none';
+    renderNav(); renderQuiz();
+}
+
+function renderNav() {
+    const g = document.getElementById('navGrid');
+    g.innerHTML = "";
+    data.forEach((_, i) => {
+        let d = document.createElement('div');
+        d.className = 'nav-item'; d.id = `nav-${i}`;
+        d.innerText = i + 1;
+        d.onclick = () => document.getElementById(`qcard-${i}`).scrollIntoView({behavior:'smooth'});
+        g.appendChild(d);
+    });
+}
+
+function renderQuiz() {
+    const c = document.getElementById('quiz');
+    c.innerHTML = "";
+    data.forEach((d, i) => {
+        let isM = d.ans.length > 1;
+        let card = document.createElement('div');
+        card.className = 'q-card'; card.id = `qcard-${i}`;
+        card.innerHTML = `
+            <div class="q-header">
+                <div class="q-id-box">
+                    <span class="blue-sq-icon" id="sq-${i}" onclick="toggleSquare(${i})"></span>
+                    <span id="num-display-${i}" style="font-weight:bold">${i+1}</span>
+                    <span style="color:#666; margin-left:10px">ID ${d.id}</span>
+                </div>
+                <div style="color:var(--primary); font-weight:bold">${d.pts.toFixed(1)} b</div>
+            </div>
+            <div style="margin-bottom:25px; line-height:1.4">${d.q}</div>
+            <div id="opts-${i}">
+                ${d.opts.map((o,oi) => `<label class="opt-label"><input type="${isM?'checkbox':'radio'}" name="q${i}" value="${oi}"><span>${o}</span></label>`).join('')}
+            </div>
+            <button class="check-btn" id="btn-${i}" onclick="check(${i})">ODEVZDAT ÚLOHU</button>
+            <div id="feedback-${i}" class="points-feedback"></div>
+        `;
+        c.appendChild(card);
+    });
+}
+
+function toggleSquare(i) {
+    const icon = document.getElementById(`sq-${i}`);
+    const navItem = document.getElementById(`nav-${i}`);
+    const numDisplay = document.getElementById(`num-display-${i}`);
+    icon.classList.toggle('active');
+    navItem.classList.toggle('flagged');
+    const isAct = icon.classList.contains('active');
+    navItem.innerText = isAct ? '?' : i + 1;
+    numDisplay.innerText = isAct ? '?' : i + 1;
+}
+
+function check(i) {
+    const d = data[i], block = document.getElementById(`opts-${i}`);
+    const btn = document.getElementById(`btn-${i}`);
+    if(btn.disabled) return;
+
+    const sel = Array.from(block.querySelectorAll('input:checked')).map(n => parseInt(n.value));
+    btn.disabled = true;
+    block.querySelectorAll('input').forEach(inp => inp.disabled = true);
+
+    let correctCount = 0, wrongCount = 0;
+    d.ans.forEach(a => { if(sel.includes(a)) correctCount++; });
+    sel.forEach(s => { if(!d.ans.includes(s)) wrongCount++; });
+
+    let gain = (correctCount - wrongCount) * (d.pts / d.ans.length);
+    if(gain < 0) gain = 0;
+    
+    curScore += gain; maxPosScore += d.pts; solved++;
+
+    const feed = document.getElementById(`feedback-${i}`);
+    feed.style.display = 'block';
+    feed.innerHTML = `Získáno ${gain.toFixed(2)} z ${d.pts} b. <div class="hint-box"><strong>Odůvodnění:</strong> ${d.rationale}</div>`;
+    feed.style.background = (gain >= d.pts * 0.99) ? '#e6f4ea' : gain > 0 ? '#fff4e5' : '#fce8e6';
+
+    let nav = document.getElementById(`nav-${i}`);
+    if(gain >= d.pts * 0.99) nav.classList.add('status-green');
+    else if(gain > 0) nav.classList.add('status-orange');
+    else nav.classList.add('status-red');
+
+    block.querySelectorAll('.opt-label').forEach((l, oi) => {
+        if(d.ans.includes(oi)) l.classList.add('correct');
+        else if(sel.includes(oi)) l.classList.add('wrong');
+    });
+
+    document.getElementById('prog').innerText = `Zodpovězeno: ${solved} / ${data.length}`;
+    document.getElementById('score').innerText = `Body: ${curScore.toFixed(2)} / ${maxPosScore.toFixed(2)}`;
+}
+
+function finishAll() {
+    if(!confirm("Opravdu chcete odevzdat všechny zbývající úlohy?")) return;
+    for(let i=0; i < data.length; i++) {
+        const btn = document.getElementById(`btn-${i}`);
+        if(!btn.disabled) check(i);
+    }
+    const finalScore = (curScore / maxPosScore) * 100;
+    alert(`Test dokončen!\nSkóre: ${curScore.toFixed(2)} / ${maxPosScore.toFixed(2)} (${finalScore.toFixed(1)}%)`);
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+</script>
+</body>
+</html>
